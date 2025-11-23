@@ -72,6 +72,7 @@ class VictoryConditions:
         self,
         max_stalemate_turns: int = 60,
         max_no_move_turns: int = 15,
+        max_turns: Optional[int] = None,
         check_missile_exhaustion: bool = True
     ):
         """
@@ -84,6 +85,7 @@ class VictoryConditions:
         """
         self._max_stalemate_turns = max_stalemate_turns
         self._max_no_move_turns = max_no_move_turns
+        self._max_turns = max_turns
         self._check_missile_exhaustion = check_missile_exhaustion
     
     def check_all(self, world: WorldState) -> VictoryResult:
@@ -94,8 +96,9 @@ class VictoryConditions:
         1. AWACS destruction (primary win condition)
         2. Enemy elimination (all enemy entities destroyed)
         3. Missile exhaustion
-        4. Combat stalemate (no shooting)
-        5. Movement stagnation (no movement)
+        4. Turn limit reached
+        5. Combat stalemate (no shooting)
+        6. Movement stagnation (no movement)
         
         Args:
             world: Current world state (contains turns_without_shooting and turns_without_movement)
@@ -119,12 +122,17 @@ class VictoryConditions:
             if result.is_game_over:
                 return result
         
-        # Priority 4: Combat stalemate
+        # Priority 4: Turn cap
+        result = self.check_turn_limit(world.turn)
+        if result.is_game_over:
+            return result
+        
+        # Priority 5: Combat stalemate
         result = self.check_combat_stalemate(world.turns_without_shooting)
         if result.is_game_over:
             return result
         
-        # Priority 5: Movement stagnation
+        # Priority 6: Movement stagnation
         result = self.check_movement_stagnation(world.turns_without_movement)
         if result.is_game_over:
             return result
@@ -293,6 +301,29 @@ class VictoryConditions:
             winner=None
         )
     
+    def check_turn_limit(self, current_turn: int) -> VictoryResult:
+        """
+        Check if the global turn limit has been reached.
+        
+        Args:
+            current_turn: The turn counter from the world
+        
+        Returns:
+            VictoryResult indicating outcome when hitting the turn cap
+        """
+        if self._max_turns is not None and current_turn >= self._max_turns:
+            return VictoryResult(
+                result=GameResult.DRAW,
+                reason=f"Turn limit reached ({self._max_turns}) - DRAW",
+                winner=None
+            )
+        
+        return VictoryResult(
+            result=GameResult.IN_PROGRESS,
+            reason="Turn limit not reached",
+            winner=None
+        )
+    
     def check_combat_stalemate(self, turns_without_shooting: int) -> VictoryResult:
         """
         Check for combat stalemate.
@@ -387,4 +418,3 @@ class VictoryConditions:
                     stats["total_missiles"] += missiles
         
         return stats
-

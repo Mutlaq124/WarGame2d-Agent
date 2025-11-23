@@ -70,6 +70,7 @@ class Scenario:
         grid_height: int = 20,
         max_stalemate_turns: int = 60,
         max_no_move_turns: int = 15,
+        max_turns: Optional[int] = None,
         check_missile_exhaustion: bool = True,
         seed: Optional[int] = None,
         blue_entities: Optional[List[Entity]] = None,
@@ -83,6 +84,7 @@ class Scenario:
             grid_height: Height of the grid
             max_stalemate_turns: Max turns without shooting before draw
             max_no_move_turns: Max turns without movement before draw
+            max_turns: Optional hard cap on total turns before draw
             check_missile_exhaustion: Check if all missiles depleted
             seed: Random seed for reproducibility (None = random)
             blue_entities: Optional list of Blue team entities
@@ -93,6 +95,7 @@ class Scenario:
         self.grid_height = grid_height
         self.max_stalemate_turns = max_stalemate_turns
         self.max_no_move_turns = max_no_move_turns
+        self.max_turns = max_turns
         self.check_missile_exhaustion = check_missile_exhaustion
         self.seed = seed
         
@@ -148,13 +151,14 @@ class Scenario:
         """
         return {
             "config": {
-                "grid_width": self.grid_width,
-                "grid_height": self.grid_height,
-                "max_stalemate_turns": self.max_stalemate_turns,
-                "max_no_move_turns": self.max_no_move_turns,
-                "check_missile_exhaustion": self.check_missile_exhaustion,
-                "seed": self.seed,
-            },
+            "grid_width": self.grid_width,
+            "grid_height": self.grid_height,
+            "max_stalemate_turns": self.max_stalemate_turns,
+            "max_no_move_turns": self.max_no_move_turns,
+            "max_turns": self.max_turns,
+            "check_missile_exhaustion": self.check_missile_exhaustion,
+            "seed": self.seed,
+        },
             "blue_entities": self.blue_entities,
             "red_entities": self.red_entities
         }
@@ -168,13 +172,14 @@ class Scenario:
         """
         return {
             "config": {
-                "grid_width": self.grid_width,
-                "grid_height": self.grid_height,
-                "max_stalemate_turns": self.max_stalemate_turns,
-                "max_no_move_turns": self.max_no_move_turns,
-                "check_missile_exhaustion": self.check_missile_exhaustion,
-                "seed": self.seed,
-            },
+            "grid_width": self.grid_width,
+            "grid_height": self.grid_height,
+            "max_stalemate_turns": self.max_stalemate_turns,
+            "max_no_move_turns": self.max_no_move_turns,
+            "max_turns": self.max_turns,
+            "check_missile_exhaustion": self.check_missile_exhaustion,
+            "seed": self.seed,
+        },
             "blue_entities": [e.to_dict() for e in self.blue_entities],
             "red_entities": [e.to_dict() for e in self.red_entities]
         }
@@ -197,6 +202,7 @@ class Scenario:
             grid_height=config.get("grid_height", 20),
             max_stalemate_turns=config.get("max_stalemate_turns", 60),
             max_no_move_turns=config.get("max_no_move_turns", 15),
+            max_turns=config.get("max_turns"),
             check_missile_exhaustion=config.get("check_missile_exhaustion", True),
             seed=config.get("seed")
         )
@@ -333,4 +339,3 @@ def create_mixed_scenario() -> Scenario:
             )
         ]
     )
-

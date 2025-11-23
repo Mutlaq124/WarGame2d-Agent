@@ -28,6 +28,7 @@ State Structure:
         "config": {
             "max_stalemate_turns": int,
             "max_no_move_turns": int,
+            "max_turns": int | None,
             "check_missile_exhaustion": bool,
         }
     }
@@ -96,9 +97,10 @@ class GridCombatEnv:
         # World state (will be initialized in reset())
         self.world: Optional[WorldState] = None
         
-        # Scenario config (will be set in reset())
+        # Scenario config (will be set in reset())s
         self._max_stalemate_turns: Optional[int] = None
         self._max_no_move_turns: Optional[int] = None
+        self._max_turns: Optional[int] = None
         self._check_missile_exhaustion: Optional[bool] = None
         
         # Mechanics modules (stateless, can be reused)
@@ -128,6 +130,7 @@ class GridCombatEnv:
                         "grid_height": int,
                         "max_stalemate_turns": int,
                         "max_no_move_turns": int,
+                        "max_turns": int | None,
                         "check_missile_exhaustion": bool,
                         "seed": int | None
                     },
@@ -155,12 +158,14 @@ class GridCombatEnv:
         # Extract victory condition settings
         self._max_stalemate_turns = scenario_config["max_stalemate_turns"]
         self._max_no_move_turns = scenario_config["max_no_move_turns"]
+        self._max_turns = scenario_config.get("max_turns", None)
         self._check_missile_exhaustion = scenario_config["check_missile_exhaustion"]
         
         # Initialize victory checker with scenario config
         self._victory_checker = VictoryConditions(
             max_stalemate_turns=self._max_stalemate_turns,
             max_no_move_turns=self._max_no_move_turns,
+            max_turns=self._max_turns,
             check_missile_exhaustion=self._check_missile_exhaustion
         )
         
@@ -269,6 +274,7 @@ class GridCombatEnv:
             "config": {
                 "max_stalemate_turns": self._max_stalemate_turns,
                 "max_no_move_turns": self._max_no_move_turns,
+                "max_turns": self._max_turns,
                 "check_missile_exhaustion": self._check_missile_exhaustion,
             }
         }
@@ -344,4 +350,3 @@ class GridCombatEnv:
     def winner(self) -> Optional[Team]:
         """Get winner (None if draw or in progress)."""
         return self.world.winner if self.world else None
-
