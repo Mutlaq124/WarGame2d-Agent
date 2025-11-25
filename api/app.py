@@ -1,10 +1,4 @@
-"""
-HTTP API entrypoint for driving the game from a web UI.
-
-Note: The current GameRunner signature may not yet align perfectly with this
-API; this file establishes the routes and can be wired up once the runner is
-adapted.
-"""
+"""HTTP API entrypoint for driving the game from a web UI."""
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -29,7 +23,7 @@ def start(request: StartRequest):
     global runner
     scenario = Scenario.from_dict(request.scenario)
     runner = GameRunner(scenario, world=request.world)
-    return runner.get_initial_frame()
+    return runner.get_initial_frame().to_dict()
 
 
 @app.post("/step")
@@ -38,11 +32,11 @@ def step(request: StepRequest):
         raise HTTPException(400, "No active game")
     if runner.done:
         raise HTTPException(400, "Game finished")
-    return runner.step(request.injections)
+    return runner.step(request.injections).to_dict()
 
 
 @app.get("/status")
 def status():
     if runner is None:
         return {"active": False}
-    return {"active": True, "step": runner.step_count, "done": runner.done}
+    return {"active": True, "turn": runner.turn, "step": runner.step_count, "done": runner.done}
