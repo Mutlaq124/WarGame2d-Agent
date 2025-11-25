@@ -143,7 +143,6 @@ def test_environment_roundtrip_with_world_resume():
             team_actions, _ = prepared.agent.get_actions(
                 state,
                 step_info=step_info,
-                **prepared.act_params,
             )
             actions.update(team_actions)
         return actions

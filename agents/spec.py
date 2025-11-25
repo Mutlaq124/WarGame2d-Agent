@@ -18,7 +18,6 @@ class AgentSpec:
     team: Team
     name: Optional[str] = None
     init_params: Dict[str, Any] = field(default_factory=dict)
-    act_params: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to a JSON-friendly dict."""
@@ -27,7 +26,6 @@ class AgentSpec:
             "team": self.team.name,
             "name": self.name,
             "init_params": self.init_params,
-            "act_params": self.act_params,
         }
 
     @classmethod
@@ -37,10 +35,11 @@ class AgentSpec:
         if team_raw is None:
             raise ValueError("AgentSpec requires 'team'")
         team = Team[team_raw] if isinstance(team_raw, str) else team_raw
+        # act_params used to be supported but are ignored now that init_params
+        # covers all configuration needs.
         return cls(
             type=data["type"],
             team=team,
             name=data.get("name"),
             init_params=data.get("init_params", {}) or {},
-            act_params=data.get("act_params", {}) or {},
         )

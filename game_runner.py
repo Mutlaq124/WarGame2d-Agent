@@ -37,12 +37,10 @@ class GameRunner:
             blue_actions, blue_action_metadata = blue_agent.agent.get_actions(
                 state,
                 step_info=last_info,
-                **blue_agent.act_params,
             )
             red_actions, red_action_metadata = red_agent.agent.get_actions(
                 state,
                 step_info=last_info,
-                **red_agent.act_params,
             )
 
             state, _rewards, done, last_info = self.env.step({**blue_actions, **red_actions})

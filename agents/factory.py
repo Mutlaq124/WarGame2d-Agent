@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
 
 from .base_agent import BaseAgent
 from .registry import resolve_agent_class
@@ -10,9 +9,8 @@ from .spec import AgentSpec
 
 @dataclass
 class PreparedAgent:
-    """Agent instance paired with static per-episode parameters."""
+    """Agent instance created from a specification."""
     agent: BaseAgent
-    act_params: Dict[str, Any]
 
 
 def create_agent_from_spec(spec: AgentSpec) -> PreparedAgent:
@@ -28,7 +26,4 @@ def create_agent_from_spec(spec: AgentSpec) -> PreparedAgent:
     if not isinstance(agent, BaseAgent):
         raise TypeError(f"Agent {cls} is not a BaseAgent")
 
-    return PreparedAgent(
-        agent=agent,
-        act_params=spec.act_params or {},
-    )
+    return PreparedAgent(agent=agent)
