@@ -70,7 +70,9 @@
     }
     #main-canvas {
       width: 100%;
-      height: 100%;
+      height: auto;
+      min-height: 520px;
+      aspect-ratio: 16 / 9;
       border-radius: 12px;
       border: 1px solid var(--border);
       background: radial-gradient(circle at 40% 20%, rgba(124,210,255,0.05), transparent 45%),
@@ -81,6 +83,10 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
+      resize: horizontal;
+      overflow: auto;
+      min-width: 320px;
+      max-width: 60vw;
     }
     .toolbar, .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .toolbar .spacer { flex: 1; }
@@ -903,7 +909,11 @@
       const { gridSize, originX, originY, gridWidth, gridHeight } = layoutCanvas(world);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      // Board background
+      ctx.fillStyle = "rgba(255,255,255,0.02)";
+      ctx.fillRect(originX, originY, gridWidth * gridSize, gridHeight * gridSize);
+      // Grid lines
+      ctx.strokeStyle = "rgba(255,255,255,0.14)";
       ctx.lineWidth = 1;
       for (let x = 0; x <= gridWidth; x++) {
         ctx.beginPath();
@@ -917,6 +927,10 @@
         ctx.lineTo(originX + gridWidth * gridSize, originY + y * gridSize);
         ctx.stroke();
       }
+      // Border
+      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(originX, originY, gridWidth * gridSize, gridHeight * gridSize);
       ctx.restore();
       return { gridSize, originX, originY };
     }
@@ -1209,7 +1223,8 @@
       canvas.height = rect.height * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const desired = Math.min(rect.width / gridWidth, rect.height / gridHeight);
-      const gridSize = Math.max(22, Math.min(54, Math.floor(desired)));
+      // Clamp to a narrower band to reduce jitter on zoom/resize
+      const gridSize = Math.max(26, Math.min(48, Math.round(desired)));
       const worldWidthPx = gridWidth * gridSize;
       const worldHeightPx = gridHeight * gridSize;
       const originX = Math.max(10, (rect.width - worldWidthPx) / 2);
