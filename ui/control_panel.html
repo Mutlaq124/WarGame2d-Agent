@@ -314,7 +314,7 @@
       <input id="backend-url" type="text" value="http://localhost:8000" style="width: 220px;">
       <span id="connection-status" class="pill dot warn clickable">Disconnected</span>
     </div>
-    <button class="btn success" id="start-btn">▶ Start Live</button>
+    <button class="btn success" id="start-btn">▶ Launch Scenario</button>
     <div class="spacer"></div>
     <span class="pill" id="mode-pill">Idle</span>
     <button class="btn" id="export-btn" disabled title="No frames to export">⬇ Export</button>
@@ -371,7 +371,7 @@
           <div class="drop-zone" id="upload-drop">Drop scenario or recording JSON</div>
           <input type="file" id="upload-file" accept=".json" style="display:none">
           <div class="row" style="margin-top:8px;">
-            <button class="btn" id="resume-from-frame-btn">Start backend from this frame</button>
+            <button class="btn" id="resume-from-frame-btn" title="Start a new live run from the selected frame">Branch from this frame</button>
           </div>
           <div class="summary-row" id="upload-summary-row">
             <button class="link-btn" id="upload-summary" style="display:none"></button>
@@ -458,7 +458,6 @@
       <textarea id="scenario-modal-editor" spellcheck="false"></textarea>
       <div class="modal-actions">
         <button class="btn primary" id="scenario-modal-save">Save changes</button>
-        <span class="pill warn" id="scenario-modal-status">Viewing only</span>
       </div>
     </div>
   </div>
@@ -598,7 +597,8 @@
       if (!btn) return;
       const hasScenario = !!state.scenario;
       btn.disabled = !hasScenario;
-      btn.textContent = state.mode === "live" && hasScenario ? "⟳ Restart Live" : "▶ Start Live";
+      const restarting = state.mode === "live" && hasScenario;
+      btn.textContent = restarting ? "⟳ Re-launch Scenario" : "▶ Launch Scenario";
       btn.title = hasScenario ? "Start a new live run with the loaded scenario" : "Load a scenario to start";
     }
 
@@ -944,8 +944,14 @@
       try {
         const payload = { scenario: state.scenario, world: worldOverride };
         await fetchJson("/start", { method: "POST", body: JSON.stringify(payload) });
-        state.frames = [];
-        state.currentIndex = 0;
+        // If starting from a prior frame, preserve history up to that frame; otherwise reset
+        if (!worldOverride) {
+          state.frames = [];
+          state.currentIndex = 0;
+        } else {
+          state.frames = state.frames.slice(0, state.currentIndex + 1);
+          state.currentIndex = state.frames.length - 1;
+        }
         state.mode = "live";
         state.victoryInfo = null;
         setPlaying(true);
