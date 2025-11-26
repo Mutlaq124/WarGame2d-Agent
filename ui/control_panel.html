@@ -45,14 +45,16 @@
     header h1 { margin: 0; font-size: 18px; letter-spacing: 0.4px; }
     #app {
       display: grid;
-      grid-template-columns: 2fr 1.25fr;
+      grid-template-columns: var(--left-col, 2fr) 10px var(--right-col, 1.25fr);
       gap: 14px;
       padding: 14px;
       flex: 1;
       min-height: 0;
+      align-items: stretch;
     }
     @media (max-width: 1100px) {
       #app { grid-template-columns: 1fr; }
+      .resize-handle { display: none; }
     }
     .surface {
       background: var(--card);
@@ -83,11 +85,20 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      resize: horizontal;
       overflow: auto;
       min-width: 320px;
       max-width: 60vw;
     }
+    .resize-handle {
+      width: 10px;
+      cursor: col-resize;
+      background: linear-gradient(180deg, rgba(124,210,255,0.1), rgba(255,179,107,0.12));
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      opacity: 0.8;
+      transition: opacity 0.2s, background 0.2s;
+    }
+    .resize-handle:hover { opacity: 1; background: linear-gradient(180deg, rgba(124,210,255,0.2), rgba(255,179,107,0.2)); }
     .toolbar, .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .toolbar .spacer { flex: 1; }
     .pill {
@@ -289,6 +300,7 @@
         <div class="pill" id="tracking-pill">Tracking: —</div>
       </div>
     </div>
+    <div class="resize-handle" id="split-handle" title="Drag to resize"></div>
 
     <div class="panel">
       <div class="surface">
@@ -422,6 +434,8 @@
   <script>
     const canvas = document.getElementById("main-canvas");
     const ctx = canvas.getContext("2d");
+    const splitHandle = document.getElementById("split-handle");
+    const appGrid = document.getElementById("app");
 
     const state = {
       baseUrl: document.getElementById("backend-url").value.trim(),
@@ -507,6 +521,33 @@
 
     function getInjectionTemplate() {
       return JSON.stringify({ blue: {}, red: {} }, null, 2);
+    }
+
+    // Drag-to-resize between canvas and panel
+    if (splitHandle && appGrid) {
+      let dragging = false;
+      function onMove(e) {
+        if (!dragging) return;
+        const rect = appGrid.getBoundingClientRect();
+        const handleWidth = splitHandle.getBoundingClientRect().width || 10;
+        const minLeft = 420;
+        const minRight = 340;
+        const x = Math.max(rect.left + minLeft, Math.min(e.clientX, rect.right - minRight - handleWidth));
+        const leftPct = ((x - rect.left) / rect.width) * 100;
+        const rightPct = 100 - leftPct;
+        appGrid.style.gridTemplateColumns = `${leftPct}% ${handleWidth}px ${rightPct}%`;
+      }
+      function stopDrag() {
+        dragging = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", stopDrag);
+      }
+      splitHandle.addEventListener("mousedown", e => {
+        dragging = true;
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", stopDrag);
+        e.preventDefault();
+      });
     }
 
     function updateScenarioSummary() {
