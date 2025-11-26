@@ -134,6 +134,7 @@
     .btn:hover { border-color: var(--accent); }
     .btn:active { transform: translateY(1px); }
     .btn.primary { background: linear-gradient(180deg,#2b3954,#1f2a41); border-color: #39486b; }
+    .btn.success { background: linear-gradient(180deg,#1f3a2a,#1a2f22); border-color: #2f5c3f; color: var(--green); }
     .btn.ghost { background: transparent; color: var(--muted); }
     .btn.danger { border-color: rgba(255,123,123,0.6); color: var(--red); }
     .btn-group { display: inline-flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
@@ -307,6 +308,7 @@
       <input id="backend-url" type="text" value="http://localhost:8000" style="width: 220px;">
       <button class="btn" id="ping-btn">Test</button>
     </div>
+    <button class="btn success" id="start-btn">▶ Start Live</button>
     <div class="spacer"></div>
     <span class="pill" id="mode-pill">Idle</span>
     <span class="pill" id="turn-pill">Turn 0</span>
@@ -364,7 +366,6 @@
             <div class="drop-zone" id="scenario-drop">Drop scenario JSON or click to choose</div>
             <input type="file" id="scenario-file" accept=".json" style="display:none">
             <div class="row" style="margin-top:8px;">
-              <button class="btn primary" id="start-btn">Start Live Game</button>
               <button class="btn" id="export-btn">Export Recording</button>
             </div>
             <div class="summary-row" id="scenario-summary-row">
