@@ -36,6 +36,7 @@ class GameRunner:
 
         self._done = False
         self._last_info: StepInfo | None = None
+        self._final_world: WorldState | None = None
 
     # ------------------------------------------------------------------#
     # Properties
@@ -88,9 +89,14 @@ class GameRunner:
             injections: Optional dict with 'blue'/'red' keys for agent kwargs.
         """
         if self._done:
+            if self._final_world is not None:
+                final_world = self._final_world
+                self._final_world = None
+                return Frame(world=final_world, done=True)
             raise RuntimeError("Game is already finished")
 
         injections = injections or {}
+        world_before: WorldState = self._state["world"].clone()
         blue_actions, blue_meta = self._blue_agent.agent.get_actions(
             self._state,
             step_info=self._last_info,
@@ -105,11 +111,15 @@ class GameRunner:
         merged_actions = {**blue_actions, **red_actions}
         self._state, _rewards, self._done, self._last_info = self.env.step(merged_actions)
 
+        if self._done:
+            self._final_world = self._state["world"].clone()
+
         return Frame(
-            world=self._state["world"],
+            world=world_before,
             actions=merged_actions,
             action_metadata={"blue": blue_meta, "red": red_meta},
             step_info=self._last_info,
+            done=self._done,
         )
 
     def run(self, *, include_history: bool = False) -> Frame | list[Frame]:
@@ -129,6 +139,13 @@ class GameRunner:
         """Backward-compatible alias for running to completion."""
         return self.run()  # type: ignore[return-value]
 
+
+    def get_final_frame(self) -> Frame:
+        """
+        Return the final world state without actions for terminal view.
+        """
+        world: WorldState | None = self._state.get("world")
+        return Frame(world=world.clone() if world else None, done=True)
 
     # Helpers
     def _agent_from_scenario(self, scenario: Scenario, team: Team) -> PreparedAgent:

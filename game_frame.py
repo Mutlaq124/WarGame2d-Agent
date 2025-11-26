@@ -15,10 +15,11 @@ class Frame:
     Immutable snapshot of a single turn, with helpers to serialize for transport.
     """
 
-    world: WorldState
+    world: WorldState | None
     actions: Optional[Mapping[int, Action]] = None
     action_metadata: Optional[Mapping[str, Any]] = None
     step_info: Optional[StepInfo] = None
+    done: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -38,6 +39,8 @@ class Frame:
             frame["action_metadata"] = dict(self.action_metadata)
         if self.step_info is not None:
             frame["step_info"] = self.step_info.to_dict()
+        if self.done is not None:
+            frame["done"] = self.done
 
         return frame
 
