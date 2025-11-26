@@ -617,8 +617,16 @@
       const btn = document.getElementById("export-btn");
       if (!btn) return;
       const hasFrames = state.frames.length > 0;
-      btn.disabled = !hasFrames;
-      btn.title = hasFrames ? `Export ${state.frames.length} frame(s)` : "No frames to export";
+      const hasScenario = !!state.scenario;
+      const enabled = hasFrames && hasScenario;
+      btn.disabled = !enabled;
+      if (!hasFrames) {
+        btn.title = "No frames to export";
+      } else if (!hasScenario) {
+        btn.title = "Load a scenario to include with export";
+      } else {
+        btn.title = `Export ${state.frames.length} frame(s) with scenario`;
+      }
       btn.textContent = hasFrames ? `⬇ Export (${state.frames.length})` : "⬇ Export";
     }
 
@@ -696,6 +704,7 @@
         clearBtn.style.display = "none";
         empty.style.display = "block";
         updateStartButton();
+        updateExportButton();
         return;
       }
       summaryBtn.textContent = `${state.scenarioName || "scenario.json"} — ${summarizeScenario(state.scenario)}`;
@@ -703,6 +712,7 @@
       clearBtn.style.display = "inline-flex";
       empty.style.display = "none";
       updateStartButton();
+      updateExportButton();
     }
 
     function updateRecordingSummary() {
