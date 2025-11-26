@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WG Control Panel</title>
+  <style>
+    :root {
+      --bg: #0c0f18;
+      --panel: #111629;
+      --card: #141b2f;
+      --border: #1f2942;
+      --accent: #7cd2ff;
+      --accent-2: #ffb36b;
+      --text: #e6edf7;
+      --muted: #9ea7be;
+      --green: #7ee0a3;
+      --red: #ff7b7b;
+      --blue: #79a6ff;
+      --yellow: #ffe38f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(124,210,255,0.08), transparent 45%),
+                  radial-gradient(circle at 80% 0%, rgba(255,179,107,0.08), transparent 40%),
+                  linear-gradient(180deg, #0b0f18, #0a0d14 40%, #080b12);
+      color: var(--text);
+      font: 14px/1.4 "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,17,28,0.85);
+      backdrop-filter: blur(6px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { margin: 0; font-size: 18px; letter-spacing: 0.4px; }
+    #app {
+      display: grid;
+      grid-template-columns: 2fr 1.25fr;
+      gap: 14px;
+      padding: 14px;
+      flex: 1;
+      min-height: 0;
+    }
+    @media (max-width: 1100px) {
+      #app { grid-template-columns: 1fr; }
+    }
+    .surface {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+    }
+    #canvas-wrapper {
+      position: relative;
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #main-canvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: radial-gradient(circle at 40% 20%, rgba(124,210,255,0.05), transparent 45%),
+                  linear-gradient(180deg, #0f1420, #0b101a 55%, #0b0f17);
+      display: block;
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .toolbar, .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .toolbar .spacer { flex: 1; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #0f1421;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+    .pill.dot::before {
+      content: "●";
+      display: inline-block;
+      font-size: 10px;
+    }
+    .pill.good { color: var(--green); border-color: rgba(126,224,163,0.5); }
+    .pill.bad { color: var(--red); border-color: rgba(255,123,123,0.5); }
+    .pill.warn { color: var(--yellow); border-color: rgba(255,227,143,0.45); }
+    .btn {
+      appearance: none;
+      background: #1b2235;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: border-color 0.15s, transform 0.08s, background 0.2s;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: linear-gradient(180deg,#2b3954,#1f2a41); border-color: #39486b; }
+    .btn.ghost { background: transparent; color: var(--muted); }
+    .btn.danger { border-color: rgba(255,123,123,0.6); color: var(--red); }
+    .btn-group { display: inline-flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .btn-group button { border: none; border-right: 1px solid var(--border); background: #1b2235; }
+    .btn-group button:last-child { border-right: none; }
+    .card-title { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+    .stack { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+    .tile {
+      background: #111829;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 74px;
+    }
+    .tile strong { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    input, select, textarea {
+      background: #0f1422;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+    textarea { width: 100%; min-height: 90px; resize: vertical; }
+    input[type="range"] { accent-color: var(--accent); }
+    .drop-zone {
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(20,26,40,0.7);
+      cursor: pointer;
+    }
+    .drop-zone.drag { border-color: var(--accent); color: var(--accent); background: rgba(124,210,255,0.07); }
+    #meta-json, #actions-json, #info-json {
+      background: #0f1422;
+      border-radius: 10px;
+      padding: 8px;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 12px;
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid var(--border);
+    }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>WG Control Panel</h1>
+    <span id="connection-status" class="pill dot warn">Disconnected</span>
+    <div class="row" style="gap:6px;">
+      <label class="label" for="backend-url">Backend</label>
+      <input id="backend-url" type="text" value="http://localhost:8000" style="width: 220px;">
+      <button class="btn" id="ping-btn">Test</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="mode-pill">Idle</span>
+    <span class="pill" id="turn-pill">Turn 0</span>
+  </header>
+
+  <div id="app">
+    <div class="surface" id="canvas-wrapper">
+      <div class="flex-between">
+        <div class="row">
+          <div class="btn-group">
+            <button id="play-btn" class="btn primary">▶ Play</button>
+            <button id="pause-btn" class="btn">⏸ Pause</button>
+            <button id="step-btn" class="btn">⏭ Step</button>
+          </div>
+          <label class="label">Speed</label>
+          <input id="speed-slider" type="range" min="0.25" max="3" step="0.25" value="1" style="width:140px;">
+          <span id="speed-label" class="pill">1.0x</span>
+        </div>
+        <div class="row">
+          <label class="label">View</label>
+          <select id="view-select">
+            <option value="god">Admin</option>
+            <option value="blue">Blue</option>
+            <option value="red">Red</option>
+          </select>
+          <label class="row" style="gap:4px;">
+            <input id="toggle-actions" type="checkbox" checked>
+            <span class="label">Actions</span>
+          </label>
+          <label class="row" style="gap:4px;">
+            <input id="toggle-radar" type="checkbox">
+            <span class="label">Radar</span>
+          </label>
+          <label class="row" style="gap:4px;">
+            <input id="toggle-ids" type="checkbox" checked>
+            <span class="label">IDs</span>
+          </label>
+        </div>
+        <div class="row">
+          <label class="label">Timeline</label>
+          <input id="timeline" type="range" min="0" max="0" value="0" style="width:220px;">
+          <span class="pill" id="timeline-label">0 / 0</span>
+        </div>
+      </div>
+      <canvas id="main-canvas" width="900" height="520"></canvas>
+      <div class="row">
+        <div class="pill" id="status-pill">Status: waiting</div>
+        <div class="pill" id="winner-pill">Winner: —</div>
+        <div class="pill" id="tracking-pill">Tracking: —</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="surface">
+        <div class="card-title">Load Scenario / Recording</div>
+        <div class="stack">
+          <div>
+            <div class="drop-zone" id="scenario-drop">Drop scenario JSON or click to choose</div>
+            <input type="file" id="scenario-file" accept=".json" style="display:none">
+            <div class="row" style="margin-top:8px;">
+              <button class="btn primary" id="start-btn">Start Live Game</button>
+              <button class="btn" id="export-btn">Export Recording</button>
+            </div>
+            <div id="scenario-summary" style="margin-top:8px;color:var(--muted);"></div>
+          </div>
+          <div>
+            <div class="drop-zone" id="recording-drop">Drop recording JSON (frames) or click to choose</div>
+            <input type="file" id="recording-file" accept=".json" style="display:none">
+            <div class="row" style="margin-top:8px;">
+              <button class="btn" id="replay-btn">Enter Replay Mode</button>
+              <button class="btn" id="resume-from-frame-btn">Start backend from this frame</button>
+            </div>
+            <div id="recording-summary" style="margin-top:8px;color:var(--muted);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface">
+        <div class="card-title">Loop Controls</div>
+        <div class="row">
+          <label class="label" style="min-width:80px;">Injections JSON</label>
+          <textarea id="injection-input" placeholder='{"blue": {...}, "red": {...}}'></textarea>
+        </div>
+        <div class="row">
+          <button class="btn" id="apply-injection-btn">Apply to next step</button>
+          <button class="btn ghost" id="clear-injection-btn">Clear</button>
+          <span class="pill" id="injection-status">No pending injection</span>
+        </div>
+      </div>
+
+      <div class="surface">
+        <div class="stack">
+          <div class="tile">
+            <strong>Game</strong>
+            <div id="game-meta">—</div>
+          </div>
+          <div class="tile">
+            <strong>Entities</strong>
+            <div id="entity-meta">—</div>
+          </div>
+          <div class="tile">
+            <strong>Mode</strong>
+            <div id="mode-meta">Idle</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface">
+        <div class="card-title">Frame Details</div>
+        <div class="stack">
+          <div>
+            <div class="label">Actions</div>
+            <pre id="actions-json">{}</pre>
+          </div>
+          <div>
+            <div class="label">Metadata</div>
+            <pre id="meta-json">{}</pre>
+          </div>
+          <div>
+            <div class="label">Info</div>
+            <pre id="info-json">{}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("main-canvas");
+    const ctx = canvas.getContext("2d");
+
+    const state = {
+      baseUrl: document.getElementById("backend-url").value.trim(),
+      connected: false,
+      mode: "idle", // idle | live | replay
+      scenario: null,
+      recordingScenario: null,
+      frames: [],
+      currentIndex: 0,
+      playing: false,
+      playTimer: null,
+      speed: 1,
+      pendingInjection: null,
+      showActions: true,
+      showRadar: false,
+      showIds: true,
+      view: "god",
+    };
+
+    function isFrameDone(frame) {
+      if (!frame) return false;
+      if (frame.done === true) return true;
+      return !!(frame.world && frame.world.game_over);
+    }
+
+    // ----------- Utilities -----------
+    function setStatus(el, text, variant) {
+      el.textContent = text;
+      el.classList.remove("good", "bad", "warn");
+      if (variant) el.classList.add(variant);
+    }
+
+    async function fetchJson(path, options = {}) {
+      const url = `${state.baseUrl}${path}`;
+      const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status}: ${body}`);
+      }
+      return res.json();
+    }
+
+    function summarizeScenario(scenario) {
+      if (!scenario) return "No scenario loaded.";
+      const cfg = scenario.config || {};
+      const entities = (scenario.entities || []).length;
+      const agents = (scenario.agents || []).length;
+      return `Grid ${cfg.grid_width || "?"}x${cfg.grid_height || "?"}, ${entities} entities, ${agents} agents`;
+    }
+
+    function renderJSON(el, data) {
+      el.textContent = JSON.stringify(data ?? {}, null, 2);
+    }
+
+    // ----------- Connection -----------
+    async function pingBackend() {
+      try {
+        await fetchJson("/status");
+        state.connected = true;
+        setStatus(document.getElementById("connection-status"), "Connected", "good");
+      } catch (err) {
+        console.error(err);
+        state.connected = false;
+        setStatus(document.getElementById("connection-status"), "Disconnected", "bad");
+      }
+    }
+
+    // ----------- File helpers -----------
+    function attachDrop(zone, input, onData) {
+      zone.addEventListener("click", () => input.click());
+      ["dragenter", "dragover"].forEach(evt =>
+        zone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zone.classList.add("drag"); })
+      );
+      ["dragleave", "drop"].forEach(evt =>
+        zone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zone.classList.remove("drag"); })
+      );
+      zone.addEventListener("drop", e => {
+        if (e.dataTransfer.files.length) input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event("change"));
+      });
+      input.addEventListener("change", async () => {
+        if (!input.files.length) return;
+        const text = await input.files[0].text();
+        try {
+          const json = JSON.parse(text);
+          onData(json, input.files[0].name);
+        } catch (err) {
+          alert("Invalid JSON file");
+        }
+      });
+    }
+
+    attachDrop(
+      document.getElementById("scenario-drop"),
+      document.getElementById("scenario-file"),
+      (json, name) => {
+        state.scenario = json;
+        document.getElementById("scenario-summary").textContent = `Loaded ${name || "scenario.json"} — ${summarizeScenario(json)}`;
+      }
+    );
+
+    attachDrop(
+      document.getElementById("recording-drop"),
+      document.getElementById("recording-file"),
+      (json, name) => {
+        try {
+          const parsed = normalizeRecording(json);
+          state.frames = parsed.frames;
+          state.recordingScenario = parsed.scenario || null;
+          state.mode = "replay";
+          state.currentIndex = 0;
+          state.playing = false;
+          updateTimeline();
+          document.getElementById("recording-summary").textContent =
+            `Loaded ${name || "recording.json"} — ${state.frames.length} frames` +
+            (state.recordingScenario ? `, scenario present` : "");
+          setModePill();
+          drawCurrent();
+          updateMeta();
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+    );
+
+    function normalizeRecording(json) {
+      // Expected shape: { frames: [...], scenario?: {...} }
+      if (Array.isArray(json.frames)) return { frames: json.frames, scenario: json.scenario };
+      if (Array.isArray(json.turns)) return { frames: json.turns, scenario: json.scenario }; // compat with old saves
+      if (Array.isArray(json)) return { frames: json, scenario: null };
+      throw new Error("Recording missing frames array");
+    }
+
+    // ----------- Live play -----------
+    async function startLive(worldOverride = null) {
+      if (!state.scenario) {
+        alert("Load a scenario first.");
+        return;
+      }
+      try {
+        const payload = { scenario: state.scenario, world: worldOverride };
+        await fetchJson("/start", { method: "POST", body: JSON.stringify(payload) });
+        state.frames = [];
+        state.currentIndex = 0;
+        state.mode = "live";
+        state.playing = true;
+        state.pendingInjection = null;
+        updateTimeline();
+        setModePill();
+        await stepLive(); // fetch first frame
+        if (state.playing) loop();
+      } catch (err) {
+        console.error(err);
+        alert("Failed to start game: " + err.message);
+      }
+    }
+
+    async function stepLive() {
+      const injection = state.pendingInjection || {};
+      const frame = await fetchJson("/step", {
+        method: "POST",
+        body: JSON.stringify({ injections: injection }),
+      });
+      state.frames.push(frame);
+      state.currentIndex = state.frames.length - 1;
+      updateTimeline();
+      drawCurrent();
+      updateMeta();
+      if (isFrameDone(frame)) {
+        state.playing = false;
+        setStatus(document.getElementById("status-pill"), "Status: finished", "warn");
+        // Try to fetch the terminal world-only frame once
+        if (frame.actions || frame.step_info || frame.action_metadata) {
+          try {
+            const finalFrame = await fetchJson("/step", {
+              method: "POST",
+              body: JSON.stringify({ injections: {} }),
+            });
+            state.frames.push(finalFrame);
+            state.currentIndex = state.frames.length - 1;
+            updateTimeline();
+            drawCurrent();
+            updateMeta();
+          } catch (err) {
+            console.warn("Unable to fetch final frame:", err.message);
+          }
+        }
+      }
+    }
+
+    function loop() {
+      clearTimeout(state.playTimer);
+      if (!state.playing) return;
+      const frame = state.frames[state.currentIndex];
+      if (state.mode === "live" && isFrameDone(frame)) {
+        state.playing = false;
+        return;
+      }
+      const delay = 800 / state.speed;
+      state.playTimer = setTimeout(async () => {
+        try {
+          if (state.mode === "live") {
+            await stepLive();
+          } else if (state.mode === "replay") {
+            advanceReplay();
+          }
+        } catch (err) {
+          console.error(err);
+          alert(err.message);
+          state.playing = false;
+        }
+        if (state.playing) loop();
+      }, delay);
+    }
+
+    // ----------- Replay -----------
+    function advanceReplay() {
+      if (!state.frames.length) return;
+      if (state.currentIndex < state.frames.length - 1) {
+        state.currentIndex += 1;
+      } else {
+        state.playing = false;
+      }
+      updateTimeline();
+      drawCurrent();
+      updateMeta();
+    }
+
+    // ----------- UI binding -----------
+    document.getElementById("backend-url").addEventListener("input", e => {
+      state.baseUrl = e.target.value.trim().replace(/\/$/, "");
+    });
+    document.getElementById("ping-btn").addEventListener("click", pingBackend);
+    document.getElementById("start-btn").addEventListener("click", () => startLive(null));
+    document.getElementById("play-btn").addEventListener("click", () => {
+      state.playing = true;
+      loop();
+    });
+    document.getElementById("pause-btn").addEventListener("click", () => {
+      state.playing = false;
+      clearTimeout(state.playTimer);
+    });
+    document.getElementById("step-btn").addEventListener("click", async () => {
+      if (state.mode === "live") await stepLive();
+      else advanceReplay();
+    });
+    document.getElementById("speed-slider").addEventListener("input", e => {
+      state.speed = parseFloat(e.target.value);
+      document.getElementById("speed-label").textContent = `${state.speed.toFixed(2).replace(/\.00$/, ".0")}x`;
+    });
+    document.getElementById("view-select").addEventListener("change", e => {
+      state.view = e.target.value;
+      drawCurrent();
+    });
+    document.getElementById("toggle-actions").addEventListener("change", e => {
+      state.showActions = e.target.checked;
+      drawCurrent();
+    });
+    document.getElementById("toggle-radar").addEventListener("change", e => {
+      state.showRadar = e.target.checked;
+      drawCurrent();
+    });
+    document.getElementById("toggle-ids").addEventListener("change", e => {
+      state.showIds = e.target.checked;
+      drawCurrent();
+    });
+    document.getElementById("timeline").addEventListener("input", e => {
+      state.currentIndex = parseInt(e.target.value, 10);
+      drawCurrent();
+      updateMeta();
+    });
+    document.getElementById("replay-btn").addEventListener("click", () => {
+      if (!state.frames.length) return alert("Load a recording first.");
+      state.mode = "replay";
+      state.currentIndex = 0;
+      state.playing = false;
+      setModePill();
+      updateTimeline();
+      drawCurrent();
+      updateMeta();
+    });
+    document.getElementById("export-btn").addEventListener("click", () => {
+      if (!state.frames.length) return alert("No frames to export.");
+      const payload = { source: "wg-control-panel", generated_at: new Date().toISOString(), scenario: state.scenario, frames: state.frames };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "recording.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    document.getElementById("resume-from-frame-btn").addEventListener("click", () => {
+      if (!state.frames.length) return alert("Load a recording and pick a frame.");
+      if (!state.recordingScenario && !state.scenario) {
+        return alert("Recording missing scenario. Load a scenario first.");
+      }
+      if (state.recordingScenario) state.scenario = state.recordingScenario;
+      const frame = state.frames[state.currentIndex];
+      startLive(frame.world ?? null);
+    });
+    document.getElementById("apply-injection-btn").addEventListener("click", () => {
+      const raw = document.getElementById("injection-input").value.trim();
+      if (!raw) {
+        state.pendingInjection = {};
+        setStatus(document.getElementById("injection-status"), "Pending empty injection", "warn");
+        return;
+      }
+      try {
+        state.pendingInjection = JSON.parse(raw);
+        setStatus(document.getElementById("injection-status"), "Pending custom injection", "good");
+      } catch (err) {
+        alert("Injection must be valid JSON");
+      }
+    });
+    document.getElementById("clear-injection-btn").addEventListener("click", () => {
+      state.pendingInjection = null;
+      document.getElementById("injection-input").value = "";
+      setStatus(document.getElementById("injection-status"), "No pending injection", "warn");
+    });
+
+    // ----------- Rendering -----------
+    function drawGrid(world) {
+      const { gridSize, originX, originY, gridWidth, gridHeight } = layoutCanvas(world);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= gridWidth; x++) {
+        ctx.beginPath();
+        ctx.moveTo(originX + x * gridSize, originY);
+        ctx.lineTo(originX + x * gridSize, originY + gridHeight * gridSize);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= gridHeight; y++) {
+        ctx.beginPath();
+        ctx.moveTo(originX, originY + y * gridSize);
+        ctx.lineTo(originX + gridWidth * gridSize, originY + y * gridSize);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return { gridSize, originX, originY };
+    }
+
+    function glyphAircraft(cx, cy, size, color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - size * 0.6);
+      ctx.lineTo(cx - size * 0.25, cy + size * 0.35);
+      ctx.lineTo(cx + size * 0.25, cy + size * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.6, cy);
+      ctx.lineTo(cx + size * 0.6, cy);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function glyphAwacs(cx, cy, size, color) {
+      ctx.save();
+      glyphAircraft(cx, cy, size, color);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - size * 0.45, size * 0.35, size * 0.12, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function glyphSam(cx, cy, size, color, isOn, cooldownInfo) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      // Base
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.35, cy + size * 0.35);
+      ctx.lineTo(cx + size * 0.35, cy + size * 0.35);
+      ctx.stroke();
+      // Mast
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + size * 0.35);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      // Launch rails
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = isOn ? color : "#8b93a5";
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.25, cy + size * 0.15);
+      ctx.lineTo(cx - size * 0.25, cy - size * 0.3);
+      ctx.moveTo(cx + size * 0.25, cy + size * 0.15);
+      ctx.lineTo(cx + size * 0.25, cy - size * 0.3);
+      ctx.stroke();
+      // Cooldown ring
+      if (cooldownInfo && cooldownInfo.total > 0 && cooldownInfo.remaining > 0) {
+        const r = size * 0.55;
+        ctx.strokeStyle = "#ffb36a";
+        ctx.lineWidth = 3;
+        const prog = 1.0 - cooldownInfo.remaining / cooldownInfo.total;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + prog * 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function glyphDecoy(cx, cy, size, color) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.25, cy - size * 0.25);
+      ctx.lineTo(cx + size * 0.25, cy + size * 0.25);
+      ctx.moveTo(cx + size * 0.25, cy - size * 0.25);
+      ctx.lineTo(cx - size * 0.25, cy + size * 0.25);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawRadar(cx, cy, cellSize, range, color) {
+      const radius = range * cellSize;
+      ctx.save();
+      ctx.strokeStyle = color === "red" ? "rgba(255,123,123,0.28)" : "rgba(124,210,255,0.28)";
+      ctx.fillStyle = color === "red" ? "rgba(255,123,123,0.10)" : "rgba(124,210,255,0.10)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getEntitiesForView(frame) {
+      const world = frame.world;
+      const entities = frame.entities || world.entities || [];
+      if (state.view === "god") return entities;
+
+      const team = state.view.toUpperCase();
+      const obs = frame.observations?.[state.view] || {};
+      const visibleEnemyIds = new Set(obs.visible_enemy_ids || []);
+      const friendlyIds = new Set(obs.friendly_ids || []);
+      const obsById = {};
+      (obs.entities || []).forEach(o => { obsById[o.entity_id] = o; });
+
+      return entities
+        .filter(ent => ent.team === team || visibleEnemyIds.has(ent.id))
+        .map(ent => {
+          if (ent.team === team) return ent;
+          const override = obsById[ent.id];
+          if (override) {
+            return {
+              ...ent,
+              position: override.position || ent.position || ent.pos,
+              kind: override.kind || ent.kind,
+            };
+          }
+          return ent;
+        });
+    }
+
+    function drawEntities(frame, helpers) {
+      const world = frame.world;
+      const { gridSize, originX, originY } = helpers;
+      const entities = getEntitiesForView(frame);
+      const radius = Math.max(20, Math.min(36, gridSize * 0.9));
+
+      for (const entity of entities) {
+        const pos = entity.position || entity.pos || [0, 0];
+        const [x, y] = pos;
+        const px = originX + x * gridSize;
+        const py = originY + (world.grid.height - y - 1) * gridSize;
+        const cx = px + gridSize / 2;
+        const cy = py + gridSize / 2;
+        const color = entity.team === "BLUE" ? "#79a6ff" : "#ff7b7b";
+
+        const kind = (entity.kind || "").toLowerCase();
+        const radarOn = entity.radar_on === undefined ? true : !!entity.radar_on;
+        const activeRadar = entity.active_radar ?? entity.radar_range ?? 0;
+        if (state.showRadar && activeRadar > 0 && (kind !== "sam" || radarOn)) {
+          drawRadar(cx, cy, gridSize, activeRadar, entity.team === "RED" ? "red" : "blue");
+        }
+
+        if (kind === "awacs") glyphAwacs(cx, cy, radius, color);
+        else if (kind === "sam") {
+          const cooldownInfo = {
+            remaining: entity.cooldown_remaining || 0,
+            total: entity.cooldown_steps || entity.cooldown_remaining || 0,
+          };
+          glyphSam(cx, cy, radius, color, radarOn, cooldownInfo);
+        }
+        else if (kind === "decoy") glyphDecoy(cx, cy, radius, color);
+        else glyphAircraft(cx, cy, radius, color);
+
+        if (state.showIds) {
+          ctx.fillStyle = "#f8fafc";
+          ctx.font = "bold 11px Inter, sans-serif";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(`#${entity.id}`, px + 6, py + 6);
+        }
+
+        if (!entity.alive) {
+          ctx.strokeStyle = "rgba(255,255,255,0.6)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - radius * 0.5, cy - radius * 0.5);
+          ctx.lineTo(cx + radius * 0.5, cy + radius * 0.5);
+          ctx.moveTo(cx + radius * 0.5, cy - radius * 0.5);
+          ctx.lineTo(cx - radius * 0.5, cy + radius * 0.5);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawActions(frame, helpers) {
+      if (!state.showActions) return;
+      const actions = frame.actions || [];
+      const world = frame.world;
+      const entities = frame.entities || world.entities || [];
+      const byId = {};
+      entities.forEach(e => { byId[e.id] = e; });
+      const { gridSize, originX, originY } = helpers;
+      const obs = state.view === "god" ? null : frame.observations?.[state.view] || {};
+      const visibleIds = new Set(
+        state.view === "god"
+          ? []
+          : [...(obs.visible_enemy_ids || []), ...(obs.friendly_ids || [])]
+      );
+      const viewTeam = state.view.toUpperCase();
+
+      for (const action of actions) {
+        const actor = byId[action.entity_id];
+        if (!actor) continue;
+        const isFriendly = actor.team === viewTeam;
+        const isVisible = visibleIds.has(actor.id);
+        if (state.view !== "god" && !isFriendly) continue; // hide enemy overlays in team view
+        const pos = actor.position || actor.pos || [0, 0];
+        const [x, y] = pos;
+        const cx = originX + x * gridSize + gridSize / 2;
+        const cy = originY + (world.grid.height - y - 1) * gridSize + gridSize / 2;
+        ctx.strokeStyle = actor.team === "BLUE" ? "rgba(124,210,255,0.9)" : "rgba(255,123,123,0.9)";
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = 2;
+        const type = (action.type || action.label || "").toString();
+
+        if ((action.params && action.params.dir) || /MOVE/.test(type)) {
+          const dir = (action.params?.dir || type.split(" ").pop() || "").toString().toUpperCase();
+          let dx = 0, dy = 0;
+          if (dir === "UP") dy = 1;
+          else if (dir === "DOWN") dy = -1;
+          else if (dir === "LEFT") dx = -1;
+          else if (dir === "RIGHT") dx = 1;
+          const tx = cx + dx * gridSize;
+          const ty = cy - dy * gridSize;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+          drawArrowHead(tx, ty, dx, -dy);
+        } else if (action.params && action.params.target_id) {
+          const target = byId[action.params.target_id];
+          if (target) {
+            const tpos = target.position || target.pos || [0, 0];
+            const [tx, tyRaw] = tpos;
+            const txPx = originX + tx * gridSize + gridSize / 2;
+            const tyPx = originY + (world.grid.height - tyRaw - 1) * gridSize + gridSize / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(txPx, tyPx);
+            ctx.stroke();
+            drawArrowHead(txPx, tyPx, txPx - cx, tyPx - cy, true);
+          }
+        }
+      }
+    }
+
+    function drawArrowHead(x, y, dx, dy, normalize=false) {
+      if (normalize) {
+        const len = Math.hypot(dx, dy) || 1;
+        dx /= len; dy /= len;
+      }
+      const size = 8;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-size, size * 0.6);
+      ctx.lineTo(-size, -size * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawCurrent() {
+      const frame = state.frames[state.currentIndex];
+      if (!frame || !frame.world) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      const helpers = drawGrid(frame.world);
+      drawActions(frame, helpers);
+      drawEntities(frame, helpers);
+      document.getElementById("turn-pill").textContent = `Turn ${frame.world.turn ?? frame.turn ?? state.currentIndex}`;
+      document.getElementById("timeline").value = state.currentIndex;
+      document.getElementById("timeline-label").textContent = `${state.currentIndex} / ${Math.max(state.frames.length - 1, 0)}`;
+      document.getElementById("winner-pill").textContent = `Winner: ${frame.world.winner || "—"}`;
+      const tracking = `NoShoot: ${frame.world.turns_without_shooting ?? "?"}, NoMove: ${frame.world.turns_without_movement ?? "?"}`;
+      document.getElementById("tracking-pill").textContent = `Tracking: ${tracking}`;
+      setStatus(document.getElementById("status-pill"), `Status: ${frame.world.game_over ? "finished" : "running"}`, frame.world.game_over ? "warn" : "good");
+      renderJSON(document.getElementById("actions-json"), frame.actions || []);
+      renderJSON(document.getElementById("meta-json"), frame.action_metadata || {});
+      renderJSON(document.getElementById("info-json"), frame.step_info || {});
+    }
+    // Ensure canvas adapts on resize (using latest frame)
+    window.addEventListener("resize", () => drawCurrent());
+
+    function layoutCanvas(world) {
+      const gridWidth = world.grid.width;
+      const gridHeight = world.grid.height;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const desired = Math.min(rect.width / gridWidth, rect.height / gridHeight);
+      const gridSize = Math.max(22, Math.min(54, Math.floor(desired)));
+      const worldWidthPx = gridWidth * gridSize;
+      const worldHeightPx = gridHeight * gridSize;
+      const originX = Math.max(10, (rect.width - worldWidthPx) / 2);
+      const originY = Math.max(10, (rect.height - worldHeightPx) / 2);
+      return { gridSize, originX, originY, gridWidth, gridHeight };
+    }
+
+    function updateTimeline() {
+      const slider = document.getElementById("timeline");
+      slider.max = Math.max(state.frames.length - 1, 0);
+      slider.value = state.currentIndex;
+      document.getElementById("timeline-label").textContent = `${state.currentIndex} / ${slider.max}`;
+    }
+
+    function updateMeta() {
+      const frame = state.frames[state.currentIndex];
+      if (!frame || !frame.world) {
+        document.getElementById("game-meta").textContent = "No frame loaded.";
+        document.getElementById("entity-meta").textContent = "—";
+        document.getElementById("mode-meta").textContent = state.mode;
+        return;
+      }
+      const entities = frame.entities || frame.world.entities || [];
+      const alive = entities.filter(e => e.alive !== false).length;
+      document.getElementById("game-meta").textContent =
+        `Turn ${frame.turn ?? frame.world.turn}, game over: ${frame.world.game_over ? "yes" : "no"}`;
+      document.getElementById("entity-meta").textContent =
+        `${alive}/${entities.length} alive`;
+      document.getElementById("mode-meta").textContent = state.mode;
+    }
+
+    function setModePill() {
+      setStatus(document.getElementById("mode-pill"), state.mode === "live" ? "Live" : state.mode === "replay" ? "Replay" : "Idle", "warn");
+    }
+
+    // Init
+    setModePill();
+    pingBackend();
+  </script>
+</body>
+</html>
