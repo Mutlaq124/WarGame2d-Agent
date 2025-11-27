@@ -36,6 +36,7 @@ class Observation:
         team: Team affiliation
         position: Grid position
         seen_by: Set of entity IDs that can see this entity
+        has_fired_before: Whether this entity has ever fired (from team intel)
     """
 
     entity_id: int
@@ -43,6 +44,7 @@ class Observation:
     team: Team
     position: GridPos
     seen_by: Set[int] = field(default_factory=set)
+    has_fired_before: bool = False
 
     def is_friendly(self, observer_team: Team) -> bool:
         """Check if this observation is of a friendly entity."""
@@ -64,7 +66,8 @@ class Observation:
             "kind": self.kind.value,  # Serialize enum as string value
             "team": self.team.value,
             "position": list(self.position),
-            "seen_by": list(self.seen_by)
+            "seen_by": list(self.seen_by),
+            "has_fired_before": self.has_fired_before,
         }
 
     @classmethod
@@ -83,7 +86,8 @@ class Observation:
             kind=EntityKind(data["kind"]),  # Deserialize string back to enum
             team=Team(data["team"]),
             position=tuple(data["position"]),
-            seen_by=set(data["seen_by"])
+            seen_by=set(data["seen_by"]),
+            has_fired_before=data.get("has_fired_before", False),
         )
 
     def to_json(self) -> str:
@@ -122,7 +126,9 @@ class ObservationSet:
         If observation already exists, merges the seen_by sets.
         """
         if obs.entity_id in self.observations:
-            self.observations[obs.entity_id].seen_by.update(obs.seen_by)
+            existing = self.observations[obs.entity_id]
+            existing.seen_by.update(obs.seen_by)
+            existing.has_fired_before = existing.has_fired_before or obs.has_fired_before
         else:
             self.observations[obs.entity_id] = obs
 

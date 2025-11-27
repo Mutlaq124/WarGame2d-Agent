@@ -61,19 +61,13 @@ class SensorSystem:
         
         # Step 2: Register friendly IDs
         for entity in world.get_alive_entities():
-            team_view = world.get_team_view(entity.team)
-            team_view.add_friendly_id(entity.id)
+            # We add entity id to it's team view as friendly
+            world.get_team_view(entity.team).add_friendly_id(entity.id)
         
         # Step 3: Compute observations for each entity
         for observer in world.get_alive_entities():
             observations = self.compute_entity_observations(world, observer)
-            
-            # Store on entity (for easy access)
-            observer.observations = observations
-            
-            # Add to team view
-            team_view = world.get_team_view(observer.team)
-            team_view.add_observations(observations)
+            world.get_team_view(observer.team).add_observations(observations)
         
         # Step 4: Add self-observations (entities always see themselves)
         for entity in world.get_alive_entities():
@@ -84,8 +78,7 @@ class SensorSystem:
                 position=entity.pos,
                 seen_by={entity.id}
             )
-            team_view = world.get_team_view(entity.team)
-            team_view.add_observation(self_obs)
+            world.get_team_view(entity.team).add_observation(self_obs)
     
     def compute_entity_observations(
         self, 
@@ -108,6 +101,8 @@ class SensorSystem:
         if not observer.alive:
             return observations
         
+        team_view = world.get_team_view(observer.team)
+
         # Get active radar range (handles SAM on/off)
         active_radar = observer.get_active_radar_range()
         if active_radar <= 0:
@@ -115,10 +110,10 @@ class SensorSystem:
         
         # Check all other entities
         for target in world.get_all_entities():
-            # Can't observe self
+            # Skip self; self-knowledge is injected later regardless of sensors
             if target.id == observer.id:
                 continue
-            
+
             # Can't observe dead entities
             if not target.alive:
                 continue
@@ -141,7 +136,8 @@ class SensorSystem:
                 kind=apparent_kind,
                 team=target.team,
                 position=target.pos,
-                seen_by={observer.id}
+                seen_by={observer.id},
+                has_fired_before=team_view.has_enemy_fired(target.id) if target.team != observer.team else False,
             )
             observations.append(obs)
         
