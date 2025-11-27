@@ -34,12 +34,8 @@ def hit_probability(
     """
     Calculate the probability of hitting a target at a given distance.
 
-    Hit probability decreases linearly with distance:
-    - At distance 0: probability = base
-    - At distance = max_range: probability = min_p
-    - Beyond max_range: probability = min_p (clamped)
-
-    The formula is: max(min_p, base * (1 - distance/max_range))
+    Hit probability decreases linearly with distance from `base` at distance 0
+    to `min_p` at distance = max_range. Beyond max_range, probability is 0.
 
     Args:
         distance: Distance to target (must be >= 0)
@@ -73,11 +69,12 @@ def hit_probability(
     if min_p > base:
         raise ValueError(f"Min probability ({min_p}) cannot exceed base ({base})")
 
-    # Calculate linear interpolation
-    # At distance 0: frac = 1.0, prob = base
-    # At distance = max_range: frac = 0.0, prob = min_p
-    frac = max(0.0, min(1.0, 1.0 - (distance / max_range)))
-    probability = max(min_p, base * frac)
+    # Linear interpolation: base at 0, min_p at max_range
+    if distance >= max_range:
+        return 0.0
+
+    frac = max(0.0, min(1.0, distance / max_range))
+    probability = base - (base - min_p) * frac
 
     return probability
 
