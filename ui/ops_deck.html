@@ -45,16 +45,16 @@
     header h1 { margin: 0; font-size: 18px; letter-spacing: 0.4px; }
     #app {
       display: grid;
-      grid-template-columns: var(--left-col, 2fr) 10px var(--right-col, 1.25fr);
-      gap: 14px;
+      grid-template-columns: minmax(580px, 1fr) 360px;
+      gap: 16px;
       padding: 14px;
       flex: 1;
       min-height: 0;
-      align-items: stretch;
+      align-items: start;
     }
     @media (max-width: 1100px) {
       #app { grid-template-columns: 1fr; }
-      .resize-handle { display: none; }
+      #control-panel { width: 100%; max-width: 100%; }
     }
     .surface {
       background: var(--card);
@@ -65,16 +65,17 @@
     }
     #canvas-wrapper {
       position: relative;
-      min-height: 520px;
+      min-height: 560px;
+      max-height: calc(100vh - 140px);
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
     #main-canvas {
       width: 100%;
-      height: auto;
-      min-height: 520px;
-      aspect-ratio: 16 / 9;
+      height: min(78vh, 820px);
+      min-height: 500px;
+      max-height: calc(100vh - 170px);
       border-radius: 12px;
       border: 1px solid var(--border);
       background: radial-gradient(circle at 40% 20%, rgba(124,210,255,0.05), transparent 45%),
@@ -86,19 +87,10 @@
       flex-direction: column;
       gap: 12px;
       overflow: auto;
-      min-width: 320px;
-      max-width: 60vw;
+      min-width: 340px;
+      width: 360px;
+      max-width: 380px;
     }
-    .resize-handle {
-      width: 10px;
-      cursor: col-resize;
-      background: linear-gradient(180deg, rgba(124,210,255,0.1), rgba(255,179,107,0.12));
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      opacity: 0.8;
-      transition: opacity 0.2s, background 0.2s;
-    }
-    .resize-handle:hover { opacity: 1; background: linear-gradient(180deg, rgba(124,210,255,0.2), rgba(255,179,107,0.2)); }
     .toolbar, .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .toolbar .spacer { flex: 1; }
     .pill {
@@ -428,9 +420,8 @@
         <div class="pill" id="entity-pill">Entities: —</div>
       </div>
     </div>
-    <div class="resize-handle" id="split-handle" title="Drag to resize"></div>
 
-    <div class="panel">
+    <div class="panel" id="control-panel">
       <div class="surface">
         <div class="card-title">Load Scenario / Recording</div>
         <div>
@@ -572,8 +563,6 @@
   <script>
     const canvas = document.getElementById("main-canvas");
     const ctx = canvas.getContext("2d");
-    const splitHandle = document.getElementById("split-handle");
-    const appGrid = document.getElementById("app");
 
     const state = {
       baseUrl: document.getElementById("backend-url").value.trim(),
@@ -805,33 +794,6 @@
 
     function getInjectionTemplate() {
       return JSON.stringify({ blue: {}, red: {} }, null, 2);
-    }
-
-    // Drag-to-resize between canvas and panel
-    if (splitHandle && appGrid) {
-      let dragging = false;
-      function onMove(e) {
-        if (!dragging) return;
-        const rect = appGrid.getBoundingClientRect();
-        const handleWidth = splitHandle.getBoundingClientRect().width || 10;
-        const minLeft = 420;
-        const minRight = 340;
-        const x = Math.max(rect.left + minLeft, Math.min(e.clientX, rect.right - minRight - handleWidth));
-        const leftPct = ((x - rect.left) / rect.width) * 100;
-        const rightPct = 100 - leftPct;
-        appGrid.style.gridTemplateColumns = `${leftPct}% ${handleWidth}px ${rightPct}%`;
-      }
-      function stopDrag() {
-        dragging = false;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", stopDrag);
-      }
-      splitHandle.addEventListener("mousedown", e => {
-        dragging = true;
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", stopDrag);
-        e.preventDefault();
-      });
     }
 
     function updateUploadSummary() {
@@ -1344,30 +1306,32 @@
     // ----------- Rendering -----------
     function drawGrid(world) {
       const { gridSize, originX, originY, gridWidth, gridHeight } = layoutCanvas(world);
+      const boardWidth = gridWidth * gridSize;
+      const boardHeight = gridHeight * gridSize;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       // Board background
-      ctx.fillStyle = "rgba(255,255,255,0.02)";
-      ctx.fillRect(originX, originY, gridWidth * gridSize, gridHeight * gridSize);
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillRect(originX, originY, boardWidth, boardHeight);
       // Grid lines
-      ctx.strokeStyle = "rgba(255,255,255,0.14)";
+      ctx.strokeStyle = "rgba(255,255,255,0.16)";
       ctx.lineWidth = 1;
       for (let x = 0; x <= gridWidth; x++) {
         ctx.beginPath();
-        ctx.moveTo(originX + x * gridSize, originY);
-        ctx.lineTo(originX + x * gridSize, originY + gridHeight * gridSize);
+        ctx.moveTo(originX + x * gridSize + 0.5, originY);
+        ctx.lineTo(originX + x * gridSize + 0.5, originY + boardHeight);
         ctx.stroke();
       }
       for (let y = 0; y <= gridHeight; y++) {
         ctx.beginPath();
-        ctx.moveTo(originX, originY + y * gridSize);
-        ctx.lineTo(originX + gridWidth * gridSize, originY + y * gridSize);
+        ctx.moveTo(originX, originY + y * gridSize + 0.5);
+        ctx.lineTo(originX + boardWidth, originY + y * gridSize + 0.5);
         ctx.stroke();
       }
       // Border
-      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
       ctx.lineWidth = 2;
-      ctx.strokeRect(originX, originY, gridWidth * gridSize, gridHeight * gridSize);
+      ctx.strokeRect(originX, originY, boardWidth, boardHeight);
       ctx.restore();
       return { gridSize, originX, originY };
     }
@@ -1802,8 +1766,7 @@
       canvas.height = rect.height * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const desired = Math.min(rect.width / gridWidth, rect.height / gridHeight);
-      // Clamp to a narrower band to reduce jitter on zoom/resize
-      const gridSize = Math.max(26, Math.min(48, Math.round(desired)));
+      const gridSize = Math.max(24, Math.min(72, Math.floor(desired)));
       const worldWidthPx = gridWidth * gridSize;
       const worldHeightPx = gridHeight * gridSize;
       const originX = Math.max(10, (rect.width - worldWidthPx) / 2);
