@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import importlib
+import pkgutil
 from typing import Callable, Dict, Type, TypeVar
+
+import agents
 
 from .base_agent import BaseAgent
 
 AGENT_REGISTRY: Dict[str, Type[BaseAgent]] = {}
 AgentType = TypeVar("AgentType", bound=Type[BaseAgent])
+_discovered = False
+_SKIP_MODULES = {
+    "agents.registry",
+    "agents.base_agent",
+    "agents.factory",
+    "agents.spec",
+}
 
 
 def register_agent(key: str, cls: AgentType | None = None) -> AgentType | Callable[[AgentType], AgentType]:
@@ -34,6 +44,8 @@ def resolve_agent_class(type_ref: str) -> Type[BaseAgent]:
     If `type_ref` matches a registered key, the registry entry is returned.
     Otherwise, the string is treated as a module path like "module.Class".
     """
+    _autodiscover_agents()
+
     if type_ref in AGENT_REGISTRY:
         return AGENT_REGISTRY[type_ref]
 
@@ -51,3 +63,23 @@ def resolve_agent_class(type_ref: str) -> Type[BaseAgent]:
         raise TypeError(f"{type_ref} is not a BaseAgent subclass")
 
     return cls
+
+
+def _autodiscover_agents() -> None:
+    """
+    Import all agent submodules once so @register_agent decorators run.
+
+    This lets developers rely on decorator registration without having to add
+    imports in agents/__init__.py. Modules explicitly skipped are core plumbing
+    files that should not register agents.
+    """
+    global _discovered
+    if _discovered:
+        return
+
+    for module_info in pkgutil.iter_modules(agents.__path__, agents.__name__ + "."):
+        if module_info.name in _SKIP_MODULES:
+            continue
+        importlib.import_module(module_info.name)
+
+    _discovered = True
