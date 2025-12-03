@@ -58,6 +58,3 @@ def configure_logging(
 def get_logger(name: str) -> logging.Logger:
     """Return a namespaced logger; configure_logging() should be called once on startup."""
     return logging.getLogger(name)
-
-
-# Usage (configured in main.py): from infra.logger import configure_logging, get_logger, STORAGE_DIR; configure_logging("INFO", logfile=STORAGE_DIR/"logs"/"backend.log"); log = get_logger(__name__); log.debug("message")
