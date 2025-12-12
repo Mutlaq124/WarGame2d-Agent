@@ -13,7 +13,7 @@ from .registry import register_agent, resolve_agent_class
 from .spec import AgentSpec
 from .random_agent import RandomAgent
 from .greedy_agent import GreedyAgent
-from .llm_agent import LLMAgent
+from .agentic_agent import llm_agent
 from .team_intel import TeamIntel, VisibleEnemy
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "resolve_agent_class",
     "RandomAgent",
     "GreedyAgent",
-    "LLMAgent",
+    "llm_agent",
     "TeamIntel",
     "VisibleEnemy",
 ]
