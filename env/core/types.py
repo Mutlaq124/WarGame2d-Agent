@@ -99,7 +99,7 @@ class EntityKind(Enum):
 # ============================================================================
 # GAME RESULT
 # ============================================================================
-
+ 
 class GameResult(Enum):
     """Possible game outcomes."""
     IN_PROGRESS = "in_progress"

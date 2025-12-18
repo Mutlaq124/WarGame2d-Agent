@@ -1,13 +1,9 @@
-"""
-Multi-stage LLM-powered agent that uses Groq for strategic and tactical decisions.
-"""
-
 import json
 import random
 import re
 from typing import Dict, Any, Optional, TYPE_CHECKING, List
-
-from env.core.types import Team, ActionType
+ 
+from env.core.types import Team, ActionType, EntityKind
 from env.core.actions import Action
 from env.world import WorldState
 from ..base_agent import BaseAgent
@@ -20,6 +16,8 @@ import os
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+from dotenv import load_dotenv
+load_dotenv()
 
 if TYPE_CHECKING:
     from env.environment import StepInfo
@@ -38,11 +36,10 @@ class LLMAgent(BaseAgent):
         team: Team,
         name: str = None,
         seed: Optional[int] = None,
-        provider: str = "ollama", # Choose Provider
+        provider: str = "groq",  # CHANGE: Default to groq
         model: str = None,
         api_key: Optional[str] = None,
-        temperature: float = 0.7,
-        max_memory: Optional[int] = None,  # NEW: Allow override
+        max_memory: Optional[int] = None,
         **_: Any,
     ):
         """Initialize multi-stage LLM agent."""
@@ -50,23 +47,22 @@ class LLMAgent(BaseAgent):
         self.rng = random.Random(seed)
         self.provider = provider.lower()
         self.model = model
-        self.temperature = temperature
-        self.api_key = api_key or os.getenv("OLLAMA_API_KEY")
+        self.api_key = api_key or os.getenv("GROQ_API_KEY")  # CHANGE: Use GROQ_API_KEY
 
         if self.provider == "groq":
-            self.model = "llama-3.3-70b-versatile"
+            self.model = model or "llama-3.1-8b-instant"  
         elif self.provider == "ollama":
             self.model = "llama3.1:8b-instruct-q4_K_S"
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
+        
         self._init_llm_client()
 
-        # NEW: Memory size adapts to scenario length
-        # Default: remember last 10% of game turns, min 3, max 10
         self.max_memory = max_memory if max_memory else 5  # Can be overridden
         
         self.strategy_memory: List[Dict[str, Any]] = []
         self.current_turn = 0
+        self.last_action_reasonings: Dict[int, str] = {}
 
     def get_actions(
         self,
@@ -103,6 +99,7 @@ class LLMAgent(BaseAgent):
         metadata = {
             "strategy": strategy,
             "allowed_actions": allowed_actions,
+            "action_reasonings": getattr(self, 'last_action_reasonings', {}),
             "used_llm": True
         }
         return actions, metadata
@@ -114,7 +111,7 @@ class LLMAgent(BaseAgent):
         system_prompt = f"""You are a tactical air combat commander for {self.team.name} team.
 Analyze the battlefield and determine the overall strategy."""
         
-        response = self.llm.complete(system_prompt, prompt, temperature=0.7)
+        response = self.llm.complete(system_prompt, prompt, temperature=0.2)
         strategy = self._parse_strategy(response)
         
         # Store in memory
@@ -135,17 +132,17 @@ Analyze the battlefield and determine the overall strategy."""
         for entity in intel.friendlies:
             if not entity.alive:
                 continue
-            state_text += f"  - {entity.kind.upper()} #{entity.id} at ({entity.pos[0]}, {entity.pos[1]})"
+            kind_str = entity.kind.name if isinstance(entity.kind, EntityKind) else str(entity.kind).upper()
+            state_text += f"  - {kind_str} #{entity.id} at ({entity.pos[0]}, {entity.pos[1]})"
             if hasattr(entity, 'missiles'):
                 state_text += f", Missiles: {entity.missiles}"
             state_text += "\n"
         
-        # Enemy forces
+        # Enemy forces - FIXED: Use visible_enemies instead of enemies
         state_text += f"\nEnemy Forces:\n"
-        for entity in intel.enemies:
-            if not entity.alive:
-                continue
-            state_text += f"  - {entity.kind.upper()} #{entity.id} at ({entity.pos[0]}, {entity.pos[1]})\n"
+        for enemy in intel.visible_enemies:
+            kind_str = enemy.kind.name if isinstance(enemy.kind, EntityKind) else str(enemy.kind).upper()
+            state_text += f"  - {kind_str} #{enemy.id} at ({enemy.position[0]}, {enemy.position[1]})\n"
         
         # Past strategies
         memory_text = ""
@@ -161,15 +158,14 @@ Analyze the situation:
 1. Who has the advantage (BLUE/RED/NEUTRAL), based on Number of units alive, Missile counts, Position?
 2. What are the key threats to your team (Enemy units closer to your units, Low missile counts, poor positioning)?
 3. What opportunities can you exploit(Positional advantages, missiles available, enemy weaknesses)?
-4. What should be your main strategic goal this turn (Aggressive attack, Defensive hold, Balanced approach)?
+4. What should be your main strategic goal this turn?
 Prioritize to move towards enemy targets like AWACS, Aircraft, SAM, decoys.
 Respond in JSON:
 {{
     "advantage": "BLUE/RED/NEUTRAL",
     "key_threats": ["threat description"],
     "opportunities": ["opportunity description"],
-    "strategic_goal": "your main objective",
-    "priority": "AGGRESSIVE/DEFENSIVE/BALANCED"
+    "strategic_goal": "your main objective"
 }}"""
 
     def _parse_strategy(self, response: str) -> Dict[str, Any]:
@@ -180,189 +176,196 @@ Respond in JSON:
             strategy['turn'] = self.current_turn
             return strategy
         except Exception as e:
-            print(f"[{self.name}] Strategy parse failed: {e}")
-            # return None # Fallback to None (don't use any fallback strategy)
+            logger.error(f"[{self.name}] Strategy parse failed: {e}\nResponse: {response[:200]}")
+            # Return fallback strategy
+            return {
+                "turn": self.current_turn,
+                "advantage": "NEUTRAL",
+                "key_threats": ["Parse error"],
+                "opportunities": [],
+                "strategic_goal": "Defensive hold due to parse error"
+            }
 
     def _get_tactical_actions(
-# For each friendy entity, build entity-specific prompt with strategic goal, entity status, nearby enemies(sort by distance), allowed actions
-# LLM chooses action index in JSON response    
         self,
         intel: TeamIntel,
         allowed_actions: Dict[int, List[Action]],
         strategy: Dict[str, Any],
         world: WorldState
     ) -> Dict[int, Action]:
-        """Stage 2: Get tactical decisions for each entity."""
-        actions: Dict[int, Action] = {}
+        """Stage 2: Get tactical decisions for ALL entities in one LLM call."""
+        
+        # Build structured data for all entities
+        units_data = []
+        id_order = []
         
         for entity in intel.friendlies:
             if not entity.alive or entity.id not in allowed_actions:
                 continue
             
-            # Build entity-specific prompt
-            prompt = self._build_entity_prompt(entity, intel, strategy, allowed_actions[entity.id], world)
+            id_order.append(entity.id)
             
-            system_prompt = f"""You are controlling a {entity.kind.upper()} unit in tactical combat.
-Choose the best action based on the strategic goal.
+            # Calculate enemies in range
+            entity_pos = entity.pos
+            missile_range = getattr(entity, 'missile_max_range', 0)
+            
+            enemies_in_range = []
+            for enemy in intel.visible_enemies:
+                enemy_pos = enemy.position
+                dist = abs(entity_pos[0] - enemy_pos[0]) + abs(entity_pos[1] - enemy_pos[1])
+                
+                if dist <= missile_range:
+                    kind_str = enemy.kind.name if isinstance(enemy.kind, EntityKind) else str(enemy.kind).upper()
+                    enemies_in_range.append({
+                        "id": enemy.id,
+                        "type": kind_str,
+                        "distance": dist
+                    })
+            
+            # Format allowed actions - OPTIMIZED WITH DISTANCE CONTEXT
+            allowed_formatted = []
+            for idx, action in enumerate(allowed_actions[entity.id]):
+                action_data = {
+                    "index": idx,
+                    "type": action.type.name
+                }
+                
+                # SHOOT action: extract target_id from params
+                if action.type == ActionType.SHOOT and "target_id" in action.params:
+                    action_data["target_id"] = action.params["target_id"]
+                    
+                    # ENHANCEMENT: Add target type for better LLM reasoning
+                    target_id = action.params["target_id"]
+                    for enemy in intel.visible_enemies:
+                        if enemy.id == target_id:
+                            kind_str = enemy.kind.name if isinstance(enemy.kind, EntityKind) else str(enemy.kind).upper()
+                            action_data["target_type"] = kind_str
+                            break
 
-Response format: 
-Respond only in JSON (No markdown or explanation).
+                # MOVE action: extract direction and calculate tactical value
+                elif action.type == ActionType.MOVE and "dir" in action.params:
+                    direction = action.params["dir"]
+                    action_data["direction"] = direction.name
+                    
+                    # Calculate target position from direction
+                    dx, dy = direction.delta
+                    target_pos = (entity_pos[0] + dx, entity_pos[1] + dy)
+                    action_data["target_pos"] = list(target_pos)
+                    
+                    # Calculate distance to all enemies after this move
+                    if intel.visible_enemies:
+                        min_dist_after = float('inf')
+                        best_enemy_type = None
+                        best_enemy_id = None
+                        
+                        for enemy in intel.visible_enemies:
+                            e_pos = enemy.position
+                            dist = abs(target_pos[0] - e_pos[0]) + abs(target_pos[1] - e_pos[1])
+                            if dist < min_dist_after:
+                                min_dist_after = dist
+                                kind_str = enemy.kind.name if isinstance(enemy.kind, EntityKind) else str(enemy.kind).upper()
+                                best_enemy_type = kind_str
+                                best_enemy_id = enemy.id
+                        
+                        action_data["closest_enemy_after_move"] = {
+                            "type": best_enemy_type,
+                            "id": best_enemy_id,
+                            "distance": min_dist_after
+                        }
+                    else:
+                        action_data["closest_enemy_after_move"] = None
 
-"""
+                # TOGGLE action: extract radar state
+                elif action.type == ActionType.TOGGLE and "on" in action.params:
+                    action_data["radar_on"] = action.params["on"]
+                
+                allowed_formatted.append(action_data)
             
-            response = self.llm.complete(system_prompt, prompt, temperature=0.5)
-            action = self._parse_entity_action(response, entity.id, allowed_actions[entity.id])
-            
-            if action:
-                actions[entity.id] = action
-                logger.info(f"[Entity {entity.id}] Chose action {action.type.name}")
+            # Build unit block
+            kind_str = entity.kind.name if isinstance(entity.kind, EntityKind) else str(entity.kind).upper()
+            unit_block = {
+                "entity_id": entity.id,
+                "type": kind_str,
+                "position": list(entity_pos),
+                "missiles": getattr(entity, 'missiles', 0),
+                "missile_range": missile_range,
+                "enemies_in_range": enemies_in_range,
+                "allowed_actions": allowed_formatted
+            }
+            units_data.append(unit_block)
         
-        # Fill missing with random (remove it -> no action, with log, to know and debug)
+        # Build batched prompt
+        user_prompt = f"""Strategic Goal: {strategy.get('strategic_goal')}
+
+TACTICAL SITUATION:
+{json.dumps({"units": units_data}, indent=2)}
+
+INSTRUCTIONS:
+- For EACH unit, choose ONE action index from its allowed_actions list
+- Shooting priority: AWACS > AIRCRAFT > SAM > DECOY
+- MOVEMENT PRIORITY: Choose MOVE actions with SMALLEST "distance" in "closest_enemy_after_move"
+- Prefer SHOOT if enemies in range and missiles available
+- Move towards enemies and prefer shoot over move if enemies are in range
+- If no enemies in range, move towards center of grid
+
+Respond ONLY in JSON format:
+{{"actions": [{{"entity_id": 1, "action_index": 0, "reasoning": "why move & shoot"}}, ...]}}
+"""
+        
+        system_prompt = """You are a tactical air combat controller managing multiple units.
+Fire missiles at enemy in range whenever possible.
+Choose optimal actions for ALL units in one response.
+Return ONLY valid JSON (no markdown)."""
+        
+        try:
+            response = self.llm.complete(system_prompt, user_prompt, temperature=0.7)
+            actions = self._parse_batched_actions(response, allowed_actions)
+            logger.info(f"[Batch] Parsed {len(actions)} actions from LLM")
+            
+        except Exception as e:
+            logger.error(f"[Batch] LLM call failed: {e}")
+            actions = {}
+        
+        # Fill missing with random
         for entity_id, allowed in allowed_actions.items():
-            if entity_id not in actions:
+            if entity_id not in actions and allowed:
                 actions[entity_id] = self.rng.choice(allowed)
+                logger.warning(f"[Batch] Fallback random for entity {entity_id}")
         
         return actions
 
-    def _build_entity_prompt(
-        self,
-        entity: Any,
-        intel: TeamIntel,
-        strategy: Dict[str, Any],
-        allowed: List[Action],
-        world: WorldState
-    ) -> str:
-        """Enhanced prompt for individual entity decision-making.
--> seperate shoortable(distance) and nearby targets(llm clarity), priority includes, range info include, action formatting 
-        """
-        
-        # Calculate shootable targets
-        entity_pos = getattr(entity, 'pos', (0, 0))
-        missile_range = getattr(entity, 'missile_max_range', 0)
-        
-        shootable_enemies = []
-        nearby_enemies = []
-        
-        for enemy in intel.enemies:
-            if not enemy.alive:
-                continue
-            enemy_pos = getattr(enemy, 'pos', (0, 0))
-            dist = abs(entity_pos[0] - enemy_pos[0]) + abs(entity_pos[1] - enemy_pos[1])
-            
-            if dist <= missile_range:
-                shootable_enemies.append((enemy, dist))
-            elif dist <= 10:
-                nearby_enemies.append((enemy, dist))
-        
-        # Format shootable targets (HIGH PRIORITY)
-        shootable_text = "Enemies IN RANGE (can shoot now):\n"
-        if shootable_enemies:
-            for enemy, dist in sorted(shootable_enemies, key=lambda x: x[1]):
-                kind = getattr(enemy, 'kind', 'unknown').upper()
-                pos = getattr(enemy, 'pos', (0, 0))
-                
-                # Priority based on entity type
-                if kind == "AWACS":
-                    priority = "HIGH"
-                elif kind == "AIRCRAFT":
-                    priority = "MEDIUM"
-                elif kind == "SAM":
-                    priority = "MEDIUM"
-                elif kind == "DECOY":
-                    priority = "LOW"
-                else:
-                    priority = "LOW"
-                
-                shootable_text += f"  ✓ {kind} #{enemy.id} at ({pos[0]}, {pos[1]}), distance {dist} [Priority: {priority}]\n"
-        else:
-            shootable_text += "  None (all enemies out of range)\n"
-         
-        # Format nearby but NOT shootable
-        nearby_text = "Enemies NEARBY but out of range:\n"
-        if nearby_enemies:
-            for enemy, dist in sorted(nearby_enemies, key=lambda x: x[1])[:3]:
-                kind = getattr(enemy, 'kind', 'unknown').upper()
-                pos = getattr(enemy, 'pos', (0, 0))
-                nearby_text += f"  - {kind} #{enemy.id} at ({pos[0]}, {pos[1]}), distance {dist}\n"
-        else:
-            nearby_text += "  None\n"
-        
-        # Format entity status
-        status = f"""Entity: {entity.kind.upper()} #{entity.id}
-Position: ({entity.pos[0]}, {entity.pos[1]})
-"""
-        if hasattr(entity, 'missiles'):
-            status += f"Missiles: {entity.missiles}\n"
-        
-        # Format allowed actions
-        action_text = "Allowed Actions:\n"
-        for idx, action in enumerate(allowed):
-            action_text += f"  {idx}: {action.type.name}"
-            if action.target_id:
-                action_text += f" -> Entity #{action.target_id}"
-            elif action.target_pos:
-                action_text += f" -> ({action.target_pos[0]}, {action.target_pos[1]})"
-            action_text += "\n"
-        
-        return f"""Strategic Goal: {strategy.get('strategic_goal')}
-Priority: {strategy.get('priority')}
-
-YOUR UNIT STATUS:
-  Type: {getattr(entity, 'kind', 'unknown').upper()} #{entity.id}
-  Position: ({entity_pos[0]}, {entity_pos[1]})
-  Missiles: {getattr(entity, 'missiles', 'N/A')}
-  Missile Range: {missile_range} steps (Manhattan distance)
-
-{shootable_text}
-{nearby_text}
-
-ALLOWED ACTIONS:
-{self._format_actions(allowed)}
-
-DECISION RULES:
-1. If enemies IN RANGE: Prioritize AWACS > Aircraft > SAM > Decoy
-2. If no enemies in range: Move closer OR hold position (based on strategy)
-3. Conserve missiles: Don't shoot at low-priority targets if low on ammo
-4. Defensive strategy: Protect valuable units (AWACS, SAM)
-
-Choose action index (0-{len(allowed)-1}) in JSON:
-{{"action_index": 0, "reasoning": "why"}}"""
-
-    def _format_actions(self, allowed: List[Action]) -> str:
-        """Format actions with distance info."""
-        lines = []
-        for idx, action in enumerate(allowed):
-            line = f"  {idx}: {action.type.name}"
-            if action.target_id:
-                line += f" at Entity #{action.target_id}"
-            elif action.target_pos:
-                line += f" to ({action.target_pos[0]}, {action.target_pos[1]})"
-            lines.append(line)
-        return "\n".join(lines)
-
-    def _parse_entity_action(
+    def _parse_batched_actions(
         self,
         response: str,
-        entity_id: int,
-        allowed: List[Action]
-    ) -> Optional[Action]:
-        """Parse entity action from LLM response."""
-        try:
-            json_str = self._extract_json(response)
-            data = json.loads(json_str)
-            idx = data.get("action_index", 0)
-            
-            if 0 <= idx < len(allowed):
-                return allowed[idx]
-            return allowed[0]  # Fallback to first action
-            
-        except Exception as e:
-            print(f"[{self.name}] Action parse failed for entity {entity_id}: {e}")
-            return allowed[0] if allowed else None
+        allowed_actions: Dict[int, List[Action]]
+    ) -> Dict[int, Action]:
+        """Parse batched action response."""
+        json_str = self._extract_json(response)
+        data = json.loads(json_str)
+        
+        actions = {}
+        action_reasonings = {}
+        for item in data.get("actions", []):
+            entity_id = item.get("entity_id")
+            action_idx = item.get("action_index")
+            reasoning = item.get("reasoning")
 
+            if entity_id not in allowed_actions:
+                logger.warning(f"[Batch] Unknown entity_id {entity_id}")
+                continue
+            
+            allowed = allowed_actions[entity_id]
+            if 0 <= action_idx < len(allowed):
+                actions[entity_id] = allowed[action_idx]
+                action_reasonings[entity_id] = reasoning
+                logger.debug(f"[Batch] Entity {entity_id} -> {allowed[action_idx].type.name} | Reasoning: {reasoning}")
+            else:
+                logger.warning(f"[Batch] Invalid index {action_idx} for entity {entity_id}")
+        self.last_action_reasonings = action_reasonings
+        return actions
+    
     def _extract_json(self, text: str) -> str:
         """Extract JSON from LLM response."""
-        import re
         
         # Try ```json ... ```
         match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
@@ -380,3 +383,16 @@ Choose action index (0-{len(allowed)-1}) in JSON:
             return match.group(0)
         
         raise ValueError("No JSON found")
+
+    def _init_llm_client(self):
+        """Initialize LLM client based on provider."""
+        if self.provider == "groq":
+            if not self.api_key:
+                raise ValueError("GROQ_API_KEY environment variable not set")
+            self.llm = GroqClient(api_key=self.api_key, model=self.model)
+        elif self.provider == "ollama":
+            self.llm = OllamaClient(model=self.model)
+        else:
+            raise ValueError(f"Unknown provider: {self.provider}")
+        
+        logger.info(f"[{self.name}] Initialized {self.provider} client with model {self.model}")
